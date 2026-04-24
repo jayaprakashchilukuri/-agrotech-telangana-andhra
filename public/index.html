@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="te">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1a5c2e" />
+    <meta name="description" content="రైతు సేవలు - Telangana & AP Smart Farming Platform with live mandi prices, weather, schemes, and AI assistance" />
+    <meta name="keywords" content="agriculture, telangana, andhra pradesh, mandi prices, weather, farming schemes, rythu bandhu, ysr bharosa" />
+    <meta name="author" content="AgroTech Platform" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://agrotech-telangana-ap.vercel.app/" />
+    <meta property="og:title" content="రైతు సేవలు | AgroTech — Telangana & AP" />
+    <meta property="og:description" content="Smart Farming Platform for Telangana & Andhra Pradesh Farmers" />
+    <meta property="og:image" content="/og-image.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://agrotech-telangana-ap.vercel.app/" />
+    <meta property="twitter:title" content="రైతు సేవలు | AgroTech — Telangana & AP" />
+    <meta property="twitter:description" content="Smart Farming Platform for Telangana & Andhra Pradesh Farmers" />
+    <meta property="twitter:image" content="/og-image.png" />
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "రైతు సేవలు - AgroTech Platform",
+      "description": "Smart Farming Platform for Telangana & Andhra Pradesh Farmers",
+      "url": "https://agrotech-telangana-ap.vercel.app/",
+      "applicationCategory": "Agriculture",
+      "operatingSystem": "Any",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "INR"
+      }
+    }
+    </script>
+
+    <title>రైతు సేవలు | AgroTech — Telangana & AP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Tiro+Telugu&family=Baloo+Tammudu+2:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="manifest" href="/manifest.json" />
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(registration => console.log('SW registered'))
+            .catch(error => console.log('SW registration failed'));
+        });
+      }
+    </script>
+  </body>
+</html>

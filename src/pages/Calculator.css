@@ -1,0 +1,31 @@
+/* Calculator */
+.calc-layout { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; align-items: start; }
+.calc-form-card { padding: 24px; }
+.calc-section-title { font-size: 13px; font-weight: 800; color: var(--green-700); margin-bottom: 12px; letter-spacing: 0.3px; padding-top: 4px; }
+
+.result-main-card {
+  background: linear-gradient(155deg, #052e16 0%, #14532d 100%);
+  border-radius: 18px; padding: 24px; margin-bottom: 14px; color: white;
+  box-shadow: var(--shadow-xl);
+}
+.rmc-title { font-size: 12px; font-weight: 700; opacity: 0.65; letter-spacing: 0.5px; margin-bottom: 16px; text-transform: uppercase; }
+.rmc-profit { text-align: center; padding: 20px 0; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 16px; }
+.rmc-profit-val { font-family: 'Baloo Tammudu 2', serif; font-size: 52px; font-weight: 900; letter-spacing: -2px; line-height: 1; }
+.rmc-profit-val.profit { color: #4ade80; }
+.rmc-profit-val.loss   { color: #f87171; }
+.rmc-profit-label { font-size: 13px; opacity: 0.7; margin-top: 6px; }
+.rmc-roi { font-size: 14px; font-weight: 700; margin-top: 6px; }
+.rmc-roi.profit { color: #4ade80; }
+.rmc-roi.loss   { color: #f87171; }
+.rmc-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.rmc-row:last-child { border: none; }
+.rmc-row-label { font-size: 13px; opacity: 0.8; }
+.rmc-row-sub   { font-size: 10px; opacity: 0.55; margin-top: 2px; }
+.rmc-row-val   { font-size: 15px; font-weight: 800; }
+
+.calc-placeholder { padding: 32px 24px; text-align: center; }
+.cp-icon { font-size: 48px; margin-bottom: 14px; }
+.cp-text { font-size: 14px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6; }
+.cp-tips { background: var(--green-50); border-radius: 12px; padding: 16px; text-align: left; }
+
+@media (max-width: 900px) { .calc-layout { grid-template-columns: 1fr; } }

@@ -1,0 +1,65 @@
+/* Market Prices */
+.market-summary {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;
+}
+.ms-item {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center;
+}
+.ms-item.up  .ms-val { color: #16a34a; }
+.ms-item.down .ms-val { color: #dc2626; }
+.ms-val   { font-family: 'Baloo Tammudu 2', serif; font-size: 22px; font-weight: 800; color: var(--green-800); }
+.ms-label { font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-top: 3px; }
+
+.filter-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.state-filter { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.market-main {
+  display: grid; grid-template-columns: 1fr 340px; gap: 16px; align-items: start;
+}
+.price-table-card { overflow: hidden; }
+.table-wrap { overflow-x: auto; max-height: 540px; overflow-y: auto; }
+.price-table th { position: sticky; top: 0; z-index: 1; }
+
+.pr-crop    { font-size: 13px; font-weight: 800; color: var(--text-primary); }
+.pr-variety { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+.pr-mandi   { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.pr-dist    { font-size: 10px; color: var(--text-muted); }
+.pr-price   { font-size: 16px; font-weight: 900; color: var(--green-800); }
+.pr-range   { font-size: 10px; color: var(--text-muted); }
+.pr-change.up   { color: #16a34a; font-weight: 700; font-size: 12px; }
+.pr-change.down { color: #dc2626; font-weight: 700; font-size: 12px; }
+.pr-unit { font-size: 11px; color: var(--text-muted); }
+.price-row:hover td { background: var(--green-50) !important; }
+.price-row.selected td { background: #ecfdf5 !important; }
+.table-footer { padding: 10px 16px; font-size: 10px; color: var(--text-muted); border-top: 1px solid var(--border); }
+
+/* Trend Panel */
+.trend-panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden;
+  position: sticky; top: 20px;
+}
+.tp-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 16px; background: linear-gradient(135deg, #f0fdf4, white); border-bottom: 1px solid var(--border);
+}
+.tp-crop  { font-size: 14px; font-weight: 800; color: var(--text-primary); }
+.tp-mandi { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.tp-current { text-align: right; }
+.tp-price { font-size: 24px; font-weight: 900; color: var(--green-800); font-family: 'Baloo Tammudu 2', serif; }
+.tp-change.up   { color: #16a34a; font-weight: 700; font-size: 13px; }
+.tp-change.down { color: #dc2626; font-weight: 700; font-size: 13px; }
+.tp-meta-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 0; border-bottom: 1px solid var(--border); }
+.tpm { padding: 10px 14px; text-align: center; border-right: 1px solid var(--border); }
+.tpm:last-child { border-right: none; }
+.tpm-l { display: block; font-size: 9px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 3px; }
+.tpm-v { font-size: 12px; font-weight: 800; color: var(--text-primary); }
+.tp-chart { padding: 16px 12px 8px; }
+.tp-footer { padding: 8px 16px; font-size: 10px; color: var(--text-muted); background: var(--slate-50); display: flex; justify-content: space-between; border-top: 1px solid var(--border); }
+
+@media (max-width: 900px) {
+  .market-main { grid-template-columns: 1fr; }
+  .market-summary { grid-template-columns: repeat(2,1fr); }
+  .trend-panel { position: static; }
+}
