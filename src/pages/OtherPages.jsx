@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SEED_VARIETIES, FERTILIZER_PRICES, AGRI_CALENDAR, INSURANCE_PLANS, DRONE_OPERATORS, COLD_STORAGES, CROP_DISEASES, PROCUREMENT_CENTRES } from '../data/realData';
+import { buildWeatherAlerts, fetchWeatherByCity, fetchWeatherByCoords } from '../services/agriApi';
 
 /* ─────────────── SEEDS PAGE ─────────────── */
 export const Seeds = () => {
@@ -412,16 +413,56 @@ export const Storage = () => (
 /* ─────────────── ALERTS PAGE ─────────────── */
 export const Alerts = () => {
   const [toggles, setToggles] = useState([true, true, true, false, true]);
+  const [alerts, setAlerts] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
+  const [alertsError, setAlertsError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState('');
+  const [locationNote, setLocationNote] = useState('Loading live weather alerts for selected cities...');
   const toggle = i => setToggles(t => t.map((v, j) => j === i ? !v : v));
 
-  const ALERTS = [
-    { type: 'danger', icon: '🌪', title: 'Cyclone Watch — Bay of Bengal', body: 'Low pressure area intensifying. Possible landfall in Krishna/Godavari delta region in 5–7 days. Harvest mature paddy immediately. Secure loose structures.', time: '2 hrs ago', source: 'IMD Bulletin' },
-    { type: 'warning', icon: '🌧', title: 'Heavy Rain — Krishna & Guntur Districts', body: 'IMD predicts 80–100mm rainfall Thu–Fri. Drain waterlogged paddy fields. Delay urea application. Harvest mature cotton before Thursday morning.', time: '4 hrs ago', source: 'IMD / Agrimet' },
-    { type: 'warning', icon: '🐛', title: 'Fall Armyworm (FAW) Alert — Nizamabad', body: 'FAW infestation confirmed in 8 villages, Nizamabad district. Inspect maize crops daily. Apply Spinetoram 11.7SC @ 0.5ml/L in whorl. Contact KVK: 08462-222456.', time: '1 day ago', source: 'Dept of Agriculture' },
-    { type: 'info', icon: '💧', title: 'Nagarjuna Sagar — Irrigation Schedule', body: 'Reservoir at 78% capacity. Rabi Kharif canal schedule: Right Canal water release Oct 20–Nov 5. Left Canal: Nov 1–15. Plan sowing accordingly.', time: '2 days ago', source: 'AP Irrigation Dept' },
-    { type: 'success', icon: '📢', title: 'Paddy MSP Procurement Open — AP', body: 'AP government paddy procurement at ₹2,300/qtl MSP started at 145 centres across 13 districts. Token system via village secretariat. Carry Aadhaar + passbook.', time: '3 days ago', source: 'AP Civil Supplies' },
-    { type: 'warning', icon: '🌡', title: 'Heatwave Warning — Kurnool & Anantapur', body: 'Temperatures 42–45°C expected next 3 days. Avoid pesticide spraying in afternoon. Irrigate crops before 8AM. Ensure cattle have shade and water.', time: '3 days ago', source: 'IMD' },
-  ];
+  const loadAlerts = async () => {
+    setAlertsLoading(true);
+    setAlertsError('');
+    try {
+      const trackedCities = ['Hyderabad', 'Warangal', 'Vijayawada', 'Guntur', 'Kurnool'];
+      const weatherSnapshots = await Promise.all(trackedCities.map((city) => fetchWeatherByCity(city)));
+      setAlerts(buildWeatherAlerts(weatherSnapshots));
+      setLocationNote('Live alerts generated from Open-Meteo weather signals across key TG/AP cities.');
+      setLastUpdated(new Date().toLocaleTimeString('en-IN'));
+    } catch {
+      setAlertsError('Could not refresh live alerts right now. Showing latest available alerts.');
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAlerts();
+    const timer = setInterval(() => loadAlerts(), 300000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const useMyLocationAlerts = () => {
+    if (!navigator.geolocation) {
+      setLocationNote('Geolocation is not available in this browser.');
+      return;
+    }
+
+    setLocationNote('Fetching live alerts for your current location...');
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const localWeather = await fetchWeatherByCoords(position.coords.latitude, position.coords.longitude, 'Your Location');
+        const nearbyWeather = await fetchWeatherByCity(localWeather.nearestSupportedCity || 'Hyderabad');
+        setAlerts(buildWeatherAlerts([localWeather, nearbyWeather]));
+        setLocationNote(`Live alerts for your location and nearest city (${localWeather.nearestSupportedCity || 'Hyderabad'}).`);
+        setLastUpdated(new Date().toLocaleTimeString('en-IN'));
+      },
+      () => {
+        setLocationNote('Location permission denied. Showing city-based live alerts.');
+      },
+      { enableHighAccuracy: true, timeout: 12000 }
+    );
+  };
 
   const typeMap = { danger: 'alert-danger', warning: 'alert-warning', info: 'alert-info', success: 'alert-success' };
 
@@ -433,8 +474,23 @@ export const Alerts = () => {
         <p>Real-time weather, pest, procurement and disaster alerts for Telangana & Andhra Pradesh farmers.</p>
       </div>
 
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <button className="btn btn-outline btn-sm" onClick={useMyLocationAlerts}>📍 Use My Location Alerts</button>
+        <button className="btn btn-outline btn-sm" onClick={loadAlerts} disabled={alertsLoading}>{alertsLoading ? 'Refreshing...' : '🔄 Refresh Alerts'}</button>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{locationNote}</span>
+      </div>
+      {lastUpdated && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>Auto-refresh: every 5 min | Last updated at {lastUpdated}</div>}
+      {alertsError && (
+        <div className="card" style={{ padding: 10, marginBottom: 12, color: '#b45309', fontSize: 13 }}>
+          {alertsError}
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-        {ALERTS.map((a, i) => (
+        {alertsLoading && (
+          <div className="card" style={{ padding: 14, fontSize: 13, color: 'var(--text-muted)' }}>Loading live alerts...</div>
+        )}
+        {!alertsLoading && alerts.map((a, i) => (
           <div key={i} className={`alert ${typeMap[a.type]}`}>
             <span className="alert-icon" style={{ fontSize: 22, flexShrink: 0 }}>{a.icon}</span>
             <div style={{ flex: 1 }}>

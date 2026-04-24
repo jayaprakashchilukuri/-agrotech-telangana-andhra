@@ -1,42 +1,63 @@
-const CACHE_NAME = 'agrotech-v1';
-const urlsToCache = [
-  '/',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
-  '/manifest.json'
-];
+const CACHE_NAME = 'agrotech-v2';
+const SHELL_ASSETS = ['/', '/manifest.json'];
 
-// Install event - cache resources
-self.addEventListener('install', event => {
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS))
   );
 });
 
-// Fetch event - serve from cache when offline
-self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request);
-      }
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) =>
+      Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
+          return null;
+        })
+      )
     )
   );
+  self.clients.claim();
 });
 
-// Activate event - clean up old caches
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cache => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.method !== 'GET') return;
+
+  const requestUrl = new URL(request.url);
+  const isHtmlRequest = request.headers.get('accept')?.includes('text/html');
+  const isStaticAsset = requestUrl.pathname.startsWith('/static/');
+
+  if (isHtmlRequest) {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          const cloned = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned));
+          return networkResponse;
         })
-      );
-    })
-  );
+        .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
+    );
+    return;
+  }
+
+  if (isStaticAsset) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const networkFetch = fetch(request)
+          .then((networkResponse) => {
+            const cloned = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned));
+            return networkResponse;
+          })
+          .catch(() => cached);
+
+        return cached || networkFetch;
+      })
+    );
+  }
 });

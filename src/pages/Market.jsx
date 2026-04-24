@@ -1,7 +1,75 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { MANDI_PRICES, MSP_2024_25 } from '../data/realData';
+import { fetchMarketPrices } from '../services/agriApi';
 import './Market.css';
+
+const resolveStateCode = (value) => {
+  const normalized = String(value || '').toLowerCase();
+  if (normalized === 'tg' || normalized.includes('telangana')) return 'TG';
+  if (normalized === 'ap' || normalized.includes('andhra')) return 'AP';
+  return 'AP';
+};
+
+const toNumber = (value, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const buildTrend = (min, modal, max) => {
+  const safeMin = Math.max(0, Math.round(min));
+  const safeModal = Math.max(0, Math.round(modal));
+  const safeMax = Math.max(safeModal, Math.round(max));
+
+  if (!safeModal) {
+    return [safeMin, safeMin, safeMin, safeMin, safeMin, safeMin];
+  }
+
+  const day1 = Math.round(safeModal * 0.94);
+  const day2 = Math.round(safeModal * 0.96);
+  const day3 = Math.round(safeModal * 0.98);
+  const day4 = Math.round((safeMin + safeModal) / 2);
+  const day5 = Math.round((safeModal + safeMax) / 2);
+  return [day1, day2, day3, day4, day5, safeModal];
+};
+
+const normalizeMarketData = (records = []) => {
+  if (!Array.isArray(records) || !records.length) {
+    return MANDI_PRICES;
+  }
+
+  const looksNormalized = records[0]?.crop && records[0]?.mandi && records[0]?.price;
+  if (looksNormalized) {
+    return records;
+  }
+
+  const mapped = records
+    .map((row, index) => {
+      const min = toNumber(row.min_price ?? row.min, 0);
+      const max = toNumber(row.max_price ?? row.max, min);
+      const modal = toNumber(row.modal_price ?? row.price, min || max);
+      const trend = buildTrend(min || modal, modal, max || modal);
+
+      return {
+        id: row.id || `api-${index + 1}`,
+        crop: row.commodity || row.crop || 'Unknown Crop',
+        variety: row.variety || 'Standard',
+        mandi: row.market || row.mandi || 'Unknown Mandi',
+        district: row.district || row.district_name || 'Unknown District',
+        state: resolveStateCode(row.state || row.state_name),
+        price: Math.round(modal || 0),
+        min: Math.round(min || modal || 0),
+        max: Math.round(max || modal || 0),
+        unit: row.unit || 'Quintal',
+        change: trend[5] - trend[4],
+        date: row.arrival_date || row.date || new Date().toISOString().slice(0, 10),
+        trend,
+      };
+    })
+    .filter((item) => item.price > 0);
+
+  return mapped.length ? mapped : MANDI_PRICES;
+};
 
 const PriceRow = ({ item, onSelect, selected }) => (
   <tr
@@ -96,11 +164,51 @@ const TrendChart = ({ item }) => {
 const Market = ({ lang }) => {
   const [search, setSearch] = useState('');
   const [stateFilter, setStateFilter] = useState('ALL');
+  const [marketData, setMarketData] = useState(MANDI_PRICES);
   const [selectedCrop, setSelectedCrop] = useState(MANDI_PRICES[0]);
   const [tab, setTab] = useState('prices');
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [marketSource, setMarketSource] = useState('Local fallback');
+  const [lastUpdated, setLastUpdated] = useState('');
+
+  const loadLiveMarket = async () => {
+    setIsLoading(true);
+    setLoadError('');
+
+    try {
+      const resourceId = process.env.REACT_APP_DATA_GOV_RESOURCE_ID;
+      const apiKey = process.env.REACT_APP_DATA_GOV_API_KEY;
+      const response = await fetchMarketPrices({
+        resourceId,
+        apiKey,
+        limit: 250,
+      });
+
+      const normalized = normalizeMarketData(response);
+      setMarketData(normalized);
+      setSelectedCrop(normalized[0] || null);
+      setMarketSource(resourceId && apiKey ? 'data.gov.in live API' : 'Local fallback data');
+      setLastUpdated(new Date().toLocaleString('en-IN'));
+    } catch {
+      setMarketData(MANDI_PRICES);
+      setSelectedCrop(MANDI_PRICES[0]);
+      setLoadError('Could not fetch live market feed. Showing fallback mandi data.');
+      setMarketSource('Local fallback data');
+      setLastUpdated(new Date().toLocaleString('en-IN'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadLiveMarket();
+    const timer = setInterval(() => loadLiveMarket(), 300000);
+    return () => clearInterval(timer);
+  }, []);
 
   const filtered = useMemo(() => {
-    return MANDI_PRICES.filter(item => {
+    return marketData.filter(item => {
       const matchSearch =
         item.crop.toLowerCase().includes(search.toLowerCase()) ||
         item.mandi.toLowerCase().includes(search.toLowerCase()) ||
@@ -108,10 +216,10 @@ const Market = ({ lang }) => {
       const matchState = stateFilter === 'ALL' || item.state === stateFilter;
       return matchSearch && matchState;
     });
-  }, [search, stateFilter]);
+  }, [marketData, search, stateFilter]);
 
-  const upCount   = MANDI_PRICES.filter(m => m.change > 0).length;
-  const downCount = MANDI_PRICES.filter(m => m.change < 0).length;
+  const upCount = marketData.filter(m => m.change > 0).length;
+  const downCount = marketData.filter(m => m.change < 0).length;
 
   return (
     <div className="market-page animate-fadeUp">
@@ -119,13 +227,26 @@ const Market = ({ lang }) => {
       <div className="page-header">
         <div className="breadcrumb">🏠 Home / Market Prices</div>
         <h1>📈 Mandi Prices — Telangana & AP</h1>
-        <p>Live prices from {MANDI_PRICES.length} mandis. Data from Agmarknet / e-NAM. Updated daily.</p>
+        <p>Live prices from {marketData.length} mandis. Data from Agmarknet / e-NAM. Updated daily.</p>
       </div>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <button className="btn btn-outline btn-sm" onClick={loadLiveMarket} disabled={isLoading}>
+          {isLoading ? 'Refreshing...' : 'Refresh Live Prices'}
+        </button>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Source: {marketSource}</span>
+        {lastUpdated && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Updated: {lastUpdated}</span>}
+      </div>
+      {loadError && (
+        <div className="card" style={{ padding: 10, marginBottom: 12, color: '#b45309', fontSize: 13 }}>
+          {loadError}
+        </div>
+      )}
 
       {/* Summary Bar */}
       <div className="market-summary">
         <div className="ms-item">
-          <div className="ms-val">{MANDI_PRICES.length}</div>
+          <div className="ms-val">{marketData.length}</div>
           <div className="ms-label">Crops Tracked</div>
         </div>
         <div className="ms-item up">
@@ -211,7 +332,7 @@ const Market = ({ lang }) => {
                 </table>
               </div>
               <div className="table-footer">
-                Showing {filtered.length} of {MANDI_PRICES.length} crops |
+                Showing {filtered.length} of {marketData.length} crops |
                 Source: Agmarknet Portal | Prices in ₹ per {selectedCrop?.unit || 'Quintal'}
               </div>
             </div>

@@ -1,15 +1,76 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { CITIES_WEATHER, WEATHER_FORECAST } from '../data/realData';
+import { buildFarmerAdvisories, describeWeatherCode, fetchWeatherByCity, fetchWeatherByCoords } from '../services/agriApi';
 import './Weather.css';
 
 const Weather = () => {
   const [city, setCity] = useState(CITIES_WEATHER[0]);
+  const [liveCity, setLiveCity] = useState(CITIES_WEATHER[0]);
+  const [liveTempsByCity, setLiveTempsByCity] = useState({});
+  const [lastUpdated, setLastUpdated] = useState('');
+  const [loadingLive, setLoadingLive] = useState(false);
+  const [weatherError, setWeatherError] = useState('');
+  const [gpsNote, setGpsNote] = useState('');
+  const [selectedCrop, setSelectedCrop] = useState('paddy');
+  const [cropStage, setCropStage] = useState('general');
   const [state, setStateF] = useState('ALL');
 
   const cities = state === 'ALL' ? CITIES_WEATHER : CITIES_WEATHER.filter(c => c.state === state);
 
-  const rainData = WEATHER_FORECAST.map(d => ({ day: d.day, rain: d.rain, high: d.high, low: d.low }));
+  const loadCityWeather = async (cityName = city.city) => {
+    setLoadingLive(true);
+    setWeatherError('');
+    try {
+      const weather = await fetchWeatherByCity(cityName);
+      setLiveCity(weather);
+      setLastUpdated(new Date().toLocaleTimeString('en-IN'));
+    } catch {
+      setWeatherError('Could not refresh live weather right now. Showing the latest available data.');
+    } finally {
+      setLoadingLive(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCityWeather(city.city);
+  }, [city.city]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadCityTemperatures = async () => {
+      const weatherList = await Promise.all(CITIES_WEATHER.map((entry) => fetchWeatherByCity(entry.city)));
+      if (!mounted) return;
+
+      const map = weatherList.reduce((acc, item) => {
+        acc[item.city] = item.temp;
+        return acc;
+      }, {});
+
+      setLiveTempsByCity(map);
+      setLastUpdated(new Date().toLocaleTimeString('en-IN'));
+    };
+
+    loadCityTemperatures();
+    const timer = setInterval(() => {
+      loadCityTemperatures();
+      loadCityWeather(city.city);
+    }, 300000);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [city.city]);
+
+  const rainData = WEATHER_FORECAST.map((day, index) => ({
+    day: day.day,
+    rain: liveCity?.raw?.daily?.precipitation_probability_max?.[index] ?? day.rain,
+    high: liveCity?.raw?.daily?.temperature_2m_max?.[index] ?? day.high,
+    low: liveCity?.raw?.daily?.temperature_2m_min?.[index] ?? day.low,
+    code: liveCity?.raw?.daily?.weather_code?.[index],
+  }));
 
   const getAdvisory = (c) => {
     if (c.rain7day > 20) return { msg: '⚠️ Heavy rain expected. Check field drainage. Delay fertilizer application.', color: 'warning' };
@@ -18,14 +79,44 @@ const Weather = () => {
     return { msg: '✅ Good farming conditions. Proceed with normal field activities.', color: 'success' };
   };
 
-  const adv = getAdvisory(city);
+  const adv = getAdvisory(liveCity);
+
+  const farmerActions = buildFarmerAdvisories(liveCity, {
+    crop: selectedCrop,
+    stage: cropStage,
+    district: liveCity.nearestSupportedDistrict || liveCity.city,
+  });
 
   const cropAdvisories = [
-    { crop: '🌾 Paddy', advice: city.rain7day > 20 ? 'Heavy rain this week — check for BLB and blast. Drain waterlogged fields.' : 'Good conditions. Apply top-dress nitrogen if at tillering stage.' },
-    { crop: '🌿 Cotton', advice: city.temp > 35 ? 'Hot weather — increase irrigation frequency. Monitor for jassids.' : 'Normal conditions. Scout for bollworm at square formation.' },
-    { crop: '🌶 Chilli', advice: city.humidity > 75 ? 'High humidity — apply Mancozeb preventively. Watch for die-back.' : 'Proceed with normal irrigation and pest monitoring.' },
+    { crop: '🌾 Paddy', advice: liveCity.rain7day > 20 ? 'Heavy rain this week — check for BLB and blast. Drain waterlogged fields.' : 'Good conditions. Apply top-dress nitrogen if at tillering stage.' },
+    { crop: '🌿 Cotton', advice: liveCity.temp > 35 ? 'Hot weather — increase irrigation frequency. Monitor for jassids.' : 'Normal conditions. Scout for bollworm at square formation.' },
+    { crop: '🌶 Chilli', advice: liveCity.humidity > 75 ? 'High humidity — apply Mancozeb preventively. Watch for die-back.' : 'Proceed with normal irrigation and pest monitoring.' },
     { crop: '🌽 Maize', advice: 'Scout for Fall Armyworm in whorl stage. Check for FAW egg masses early morning.' },
   ];
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) {
+      setGpsNote('Geolocation is not available in this browser.');
+      return;
+    }
+
+    setGpsNote('Detecting your location...');
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const weather = await fetchWeatherByCoords(position.coords.latitude, position.coords.longitude, 'Your Location');
+        setLiveCity(weather);
+        const nearestNote = weather.nearestSupportedCity
+          ? `Live for your location (nearest city: ${weather.nearestSupportedCity}, nearest district: ${weather.nearestSupportedDistrict}, ${weather.nearestDistanceKm} km).`
+          : 'Live for your location.';
+        setGpsNote(nearestNote);
+        setLastUpdated(new Date().toLocaleTimeString('en-IN'));
+      },
+      () => {
+        setGpsNote('Location permission denied. Select a city manually from the list.');
+      },
+      { enableHighAccuracy: true, timeout: 12000 }
+    );
+  };
 
   return (
     <div className="weather-page animate-fadeUp">
@@ -40,6 +131,38 @@ const Weather = () => {
         {[['ALL','🇮🇳 All Cities'],['TG','🌿 Telangana'],['AP','🌾 Andhra Pradesh']].map(([v,l]) => (
           <button key={v} className={`chip${state === v ? ' active' : ''}`} onClick={() => setStateF(v)}>{l}</button>
         ))}
+        <button className="chip" onClick={useMyLocation}>📍 Use My Location</button>
+        <button className="chip" onClick={() => loadCityWeather(city.city)} disabled={loadingLive}>🔄 Refresh Weather</button>
+      </div>
+      {gpsNote && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>{gpsNote}</div>}
+      {lastUpdated && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>Live weather auto-refresh: every 5 min | Last updated at {lastUpdated}</div>}
+      {weatherError && (
+        <div className="card" style={{ padding: 10, marginBottom: 10, color: '#b45309', fontSize: 13 }}>
+          {weatherError}
+        </div>
+      )}
+
+      <div className="grid-2" style={{ gap: 10, marginBottom: 12 }}>
+        <div className="input-group">
+          <label className="input-label">Crop Context</label>
+          <select className="input" value={selectedCrop} onChange={(e) => setSelectedCrop(e.target.value)}>
+            <option value="paddy">Paddy</option>
+            <option value="cotton">Cotton</option>
+            <option value="chilli">Chilli</option>
+            <option value="maize">Maize</option>
+          </select>
+        </div>
+        <div className="input-group">
+          <label className="input-label">Crop Stage</label>
+          <select className="input" value={cropStage} onChange={(e) => setCropStage(e.target.value)}>
+            <option value="general">General</option>
+            <option value="tillering">Tillering</option>
+            <option value="flowering">Flowering</option>
+            <option value="squaring">Squaring</option>
+            <option value="whorl">Whorl</option>
+            <option value="fruiting">Fruiting</option>
+          </select>
+        </div>
       </div>
 
       {/* City Selector */}
@@ -53,7 +176,7 @@ const Weather = () => {
             <span className="cc-icon">{c.icon}</span>
             <div>
               <div className="cc-city">{c.city}</div>
-              <div className="cc-temp">{c.temp}°C</div>
+              <div className="cc-temp">{city.city === c.city ? `${liveCity.temp}°C` : `${liveTempsByCity[c.city] ?? c.temp}°C`}</div>
             </div>
           </button>
         ))}
@@ -62,17 +185,17 @@ const Weather = () => {
       {/* Main Weather Card */}
       <div className="weather-main-card">
         <div className="wmc-left">
-          <div className="wmc-city">{city.city}, {city.state === 'TG' ? 'Telangana' : 'Andhra Pradesh'}</div>
-          <div className="wmc-temp">{city.temp}<span className="wmc-deg">°C</span></div>
-          <div className="wmc-cond">{city.icon} {city.condition}</div>
+          <div className="wmc-city">{liveCity.city}, {liveCity.state === 'TG' ? 'Telangana' : liveCity.state === 'AP' ? 'Andhra Pradesh' : 'Your Region'}</div>
+          <div className="wmc-temp">{liveCity.temp}<span className="wmc-deg">°C</span></div>
+          <div className="wmc-cond">{liveCity.icon} {liveCity.condition} {loadingLive ? '• updating...' : ''}</div>
           <div className="wmc-meta-row">
-            <div className="wmc-meta"><span>💧</span> {city.humidity}% Humidity</div>
-            <div className="wmc-meta"><span>💨</span> {city.wind} km/h Wind</div>
-            <div className="wmc-meta"><span>🌡</span> Feels {city.feels}°C</div>
-            <div className="wmc-meta"><span>☀️</span> UV Index {city.uv}</div>
+            <div className="wmc-meta"><span>💧</span> {liveCity.humidity}% Humidity</div>
+            <div className="wmc-meta"><span>💨</span> {liveCity.wind} km/h Wind</div>
+            <div className="wmc-meta"><span>🌡</span> Feels {liveCity.feels}°C</div>
+            <div className="wmc-meta"><span>☀️</span> UV Index {liveCity.uv}</div>
           </div>
-          {city.rain7day > 0 && (
-            <div className="wmc-rain-note">🌧 {city.rain7day}mm rain expected this week</div>
+          {liveCity.rain7day > 0 && (
+            <div className="wmc-rain-note">🌧 {liveCity.rain7day}mm rain expected this week ({liveCity.source})</div>
           )}
         </div>
         <div className="wmc-right">
@@ -98,14 +221,14 @@ const Weather = () => {
       {/* 7-Day Forecast */}
       <div className="card weather-forecast-card">
         <div style={{ padding:'16px 18px 12px', borderBottom:'1px solid var(--border)' }}>
-          <div style={{ fontWeight:800, fontSize:15 }}>📅 7-Day Forecast — {city.city}</div>
+          <div style={{ fontWeight:800, fontSize:15 }}>📅 7-Day Forecast — {liveCity.city}</div>
         </div>
         <div className="forecast-row">
-          {WEATHER_FORECAST.map((d,i) => (
+          {rainData.map((d,i) => (
             <div key={i} className={`fc-item${i===0?' today':''}`}>
               <div className="fci-day">{i === 0 ? 'Today' : d.day}</div>
-              <div className="fci-icon">{d.icon}</div>
-              <div className="fci-cond">{d.desc}</div>
+              <div className="fci-icon">{d.code != null ? describeWeatherCode(d.code).icon : '⛅'}</div>
+              <div className="fci-cond">{d.code != null ? describeWeatherCode(d.code).label : 'Forecast'}</div>
               <div className="fci-temps">
                 <span className="fci-high">{d.high}°</span>
                 <span className="fci-low">{d.low}°</span>
@@ -143,6 +266,15 @@ const Weather = () => {
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      <div className="card" style={{ padding: 20, marginTop: 16 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 12 }}>🧭 Workable Farmer Instructions (Live)</div>
+        {farmerActions.map((step, index) => (
+          <div key={index} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+            {index + 1}. {step}
+          </div>
+        ))}
       </div>
     </div>
   );
